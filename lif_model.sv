@@ -1,4 +1,4 @@
-module lif_neuron_optimized #(
+module lif_neuron #(
     // Bit-width parameters
     parameter int I_WIDTH      = 8,
     parameter int I_FRAC_WIDTH = 4,
