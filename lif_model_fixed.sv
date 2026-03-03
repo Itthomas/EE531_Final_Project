@@ -1,9 +1,18 @@
-// LIF neuron model with fixed parameters, aggressively optimized for resource usage (no multipliers)
+// lif_neuron_fixed — LIF neuron with hardcoded decay (510/512 ≈ 0.996) and B=1.
+//
+// No multipliers: decay uses shift-and-subtract, input is shift-aligned.
+// V_RESET is derived as -2^(WIDTH-2). All parameters are bit-width only.
+//
+// Integration:
+//   - Connect 'input_current' from a synapse_accumulator's accum_out.
+//     Input must be I_WIDTH-bit signed with I_FRAC_WIDTH fractional bits.
+//   - Feed 'spike' into the aer_handler's spike_vec bus.
+//   - Assert rst_n low for global reset; steady-state resting potential is 0.
 
 module lif_neuron_fixed #(
     // Bit-width parameters
-    parameter int I_WIDTH      = 8,
-    parameter int I_FRAC_WIDTH = 4,
+    parameter int I_WIDTH      = 16,
+    parameter int I_FRAC_WIDTH = 8,
     parameter int WIDTH        = 16,
     parameter int FRAC_WIDTH   = 8
 )(
@@ -14,8 +23,8 @@ module lif_neuron_fixed #(
 );
 
     // Width constants and types
-    localparam int ACCUM_WIDTH = 2 * WIDTH + 2;
     localparam int DECAY_WIDTH = WIDTH + 10;
+    localparam int ACCUM_WIDTH = DECAY_WIDTH + 1;
 
     typedef logic signed [WIDTH-1:0]       state_t;
     typedef logic signed [ACCUM_WIDTH-1:0] accum_t;

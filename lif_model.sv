@@ -1,7 +1,18 @@
+// lif_neuron — Parameterized Leaky Integrate-and-Fire neuron.
+//
+// Computes v[n+1] = A_OPT*v[n] + B_OPT*I[n], with saturation and spike detection.
+// All coefficients (A_OPT, B_OPT, V_RESET) must be pre-scaled to Q(WIDTH-FRAC_WIDTH).FRAC_WIDTH
+// fixed-point by the host/Python layer before synthesis.
+//
+// Integration:
+//   - Connect 'input_current' from a synapse_accumulator's accum_out.
+//   - Feed 'spike' into the aer_handler's spike_vec bus.
+//   - Assert rst_n low for global reset; steady-state resting potential is 0.
+
 module lif_neuron #(
     // Bit-width parameters
-    parameter int I_WIDTH      = 8,
-    parameter int I_FRAC_WIDTH = 4,
+    parameter int I_WIDTH      = 16,
+    parameter int I_FRAC_WIDTH = 8,
     parameter int WIDTH        = 16,
     parameter int FRAC_WIDTH   = 8,
 
