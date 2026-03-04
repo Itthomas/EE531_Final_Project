@@ -19,13 +19,12 @@
 // 
 //////////////////////////////////////////////////////////////////////////////////
 
-
 module tb_delta_mod();
 
     parameter int DATA_WIDTH = 11;
     
     logic clk;
-    logic reset;
+    logic rst_n;
     logic [DATA_WIDTH-1:0] ecg_sample;
     logic [1:0] spike_out;
     logic [DATA_WIDTH-1:0] signal;
@@ -36,7 +35,7 @@ module tb_delta_mod();
     
     delta_mod dm_dut(
         .clk(clk),
-        .dm_reset(reset),
+        .rst_n(rst_n),
         .ecg_in(ecg_sample),
         .dm_spike_out(spike_out),
         .signal(signal)
@@ -46,7 +45,7 @@ module tb_delta_mod();
     
     initial begin
         clk = 0;
-        reset = 1;
+        rst_n = 0;
         
         
         //DM
@@ -69,7 +68,7 @@ module tb_delta_mod();
         status = $fscanf(infile, "%d\n", ecg_sample);
         @(posedge clk);
 
-        reset = 0;
+        rst_n = 1;
         #10;
         
         //Modulator
