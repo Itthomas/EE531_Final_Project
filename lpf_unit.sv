@@ -27,22 +27,22 @@ module lpf_unit #(
     parameter int FRAC_WIDTH = 8
 )(
     input logic clk,
-    input logic reset,
+    input logic rst_n,
     input logic spike_in,
     output logic signed [WIDTH-1:0] y_out
 );
 
-    typedef logic signed [WIDTH-1:0] state_t;
     typedef logic signed [WIDTH+10-1:0] decay_t;
     typedef logic signed [(2*WIDTH)+2-1:0] accum_t; 
 
-    state_t y_reg;
+    logic [WIDTH-1:0] y_reg;
+    logic [WIDTH-1:0] y_next;
     
     decay_t decay_x512, decay_x2, decay_x510;
     accum_t term_decay, term_input, y_next_pre;
     
-    localparam state_t MAX_VAL = {1'b0, {(WIDTH-1){1'b1}}};
-    localparam state_t MIN_VAL = '0;
+    localparam logic [WIDTH-1:0] MAX_VAL = {1'b0, {(WIDTH-1){1'b1}}};
+    localparam logic [WIDTH-1:0] MIN_VAL = '0;
     
     always_comb begin
         //decay
@@ -57,19 +57,22 @@ module lpf_unit #(
     
         //saturation logic
         if (y_next_pre >= accum_t'(MAX_VAL))
-            y_out = MAX_VAL;
+            y_next = MAX_VAL;
         else if (y_next_pre <= accum_t'(MIN_VAL))
-            y_out = MIN_VAL;
+            y_next = MIN_VAL;
         else
-            y_out = state_t'(y_next_pre[WIDTH-1:0]);
+            y_next = y_next_pre[WIDTH-1:0];
             
     end
 
-    always_ff @(posedge clk or negedge reset) begin
-        if (!reset)
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
             y_reg <= 16'h0000;
-        else
-            y_reg <= y_out;
+            y_out <= 16'h0000;
+        end else begin
+            y_reg <= y_next;
+            y_out <= y_next;
+        end
     end
 
 endmodule
