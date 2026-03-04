@@ -7,6 +7,7 @@
 //   - Connect 'input_current' from a synapse_accumulator's accum_out.
 //     Input must be I_WIDTH-bit signed with I_FRAC_WIDTH fractional bits.
 //   - Feed 'spike' into the aer_handler's spike_vec bus.
+//   - Assert 'en' high for one cycle to advance the neuron state.
 //   - Assert rst_n low for global reset; steady-state resting potential is 0.
 
 module lif_neuron_fixed #(
@@ -18,6 +19,7 @@ module lif_neuron_fixed #(
 )(
     input  logic                      clk,
     input  logic                      rst_n,
+    input  logic                      en,
     input  logic signed [I_WIDTH-1:0] input_current,
     output logic                      spike
 );
@@ -74,7 +76,7 @@ module lif_neuron_fixed #(
         if (!rst_n) begin
             v_reg <= '0;
             spike <= 1'b0;
-        end else begin
+        end else if (en) begin
             v_reg <= v_next;
             spike <= spike_next;
         end
