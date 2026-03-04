@@ -105,9 +105,18 @@ module output_decoder#(
                 end
                 
                 FINISH: begin
-                    prediction <= accum[31:0];
+                    logic signed [31:0] val_sat;
+                    if (accum > 36'sh0_7FFF_FFFF) begin
+                        val_sat = 32'sh7FFF_FFFF; 
+                    end else if (accum < 36'shF_8000_0000) begin
+                        val_sat = 32'sh8000_0000;
+                    end else begin
+                        val_sat = accum[31:0];
+                    end
                     
-                    if ($signed(accum[31:0]) > THRESHOLD)
+                    prediction <= val_sat;
+                    
+                    if ($signed(val_sat) > THRESHOLD)
                         match <= 1'b1;
                     else
                         match <= 1'b0;
