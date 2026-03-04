@@ -19,7 +19,6 @@
 // 
 //////////////////////////////////////////////////////////////////////////////////
 
-
 module tb_output_decoder();
 
     //params
@@ -27,6 +26,7 @@ module tb_output_decoder();
     localparam int WIDTH = 16;
     localparam int FRAC_WIDTH = 8;
     localparam int ADDR_WIDTH = 4;
+    localparam int THRESHOLD = 32'h0001_0000;
     
     //I/O
     logic clk;
@@ -38,22 +38,26 @@ module tb_output_decoder();
     logic start;
     logic done;
     logic signed [31:0] prediction;
+    logic match;
     
     //DUT
     output_decoder #(
         .NUM_NEURONS(NUM_NEURONS),
         .WIDTH(WIDTH),
-        .FRAC_WIDTH(FRAC_WIDTH)
+        .FRAC_WIDTH(FRAC_WIDTH),
+        .ADDR_WIDTH(ADDR_WIDTH),
+        .THRESHOLD(THRESHOLD)
     ) dut (
         .clk(clk),
-        .reset(reset),
+        .rst_n(reset),
         .spike_in(spike_in),
         .weight_en(weight_en),
         .weight_addr(weight_addr),
         .weight_data(weight_data),
         .start(start),
         .done(done),
-        .prediction(prediction)
+        .prediction(prediction),
+        .match(match)
     );
     
     //generate clock
@@ -119,6 +123,13 @@ module tb_output_decoder();
         spike_in[3] = 1'b0;
         spike_in[6] = 1'b0;
         spike_in[15] = 1'b0;
+        
+        //more negative
+//        repeat(10) begin
+//            @(posedge clk);
+//            spike_in[12] = 1'b1;
+//        end
+//        spike_in[12] = 1'b0;
         
         //decode
         @(posedge clk);
