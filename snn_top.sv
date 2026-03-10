@@ -1,4 +1,6 @@
-// Top-level SNN module that integrates the delta modulator, synapse accumulators, LIF neurons, and output decoder.
+// Top-level pipelined SNN module that integrates the delta modulator, synapse accumulators,
+// LIF neurons, and output decoder. Downstream layers consume registered spike outputs from
+// upstream layers on later timesteps, so NUM_TIMESTEPS includes pipeline fill and drain latency.
 
 // Load weight definitions
 import snn_weights_pkg::*;
@@ -11,15 +13,18 @@ module snn_top #(
     parameter int NEURON_WIDTH       = 16,  // Bit widths for neuron state and computations.
     parameter int NEURON_FRAC_WIDTH  = 8,   // (reduce these if needed to fit synthesis constraints)
     parameter int CURRENT_WIDTH      = 16,
-    parameter int CURRENT_FRAC_WIDTH = 8,
+    parameter int CURRENT_FRAC_WIDTH = 1,
     parameter int WEIGHT_WIDTH       = 8,
-    parameter int NUM_TIMESTEPS      = 10   // Number of time steps to run inference for a single input sample
+    parameter int NUM_TIMESTEPS      = 10,  // Total inference timesteps, including pipeline fill and drain latency
+    parameter logic signed [31:0] MATCH_THRESHOLD = 32'h0001_0000
 )(
     input  logic                                clk,
     input  logic                                rst_n,
     input  logic [ECG_WIDTH-1:0]                ecg_in,
     input  logic                                inference_start,
     output logic                                inference_done,
+    output logic                                match,
+    output logic [NUM_HIDDEN_LAYERS*NEURONS_PER_LAYER-1:0] spike_raster,
     output logic signed [31:0]                  prediction,
     input  logic                                weight_en,
     input  logic [$clog2(NEURONS_PER_LAYER)-1:0] weight_addr,
@@ -50,7 +55,7 @@ module snn_top #(
         .MIN_VAL(0)
     ) u_delta_mod (
         .clk       (clk),
-        .dm_reset  (~rst_n),
+        .rst_n     (rst_n),
         .ecg_in    (ecg_in),
         .dm_spike_out(dm_spikes),
         .signal    (dm_reconstructed)
@@ -114,7 +119,8 @@ module snn_top #(
         end
     endgenerate
 
-    // Hidden layers 1..NUM_HIDDEN_LAYERS-1
+    // Hidden layers 1..NUM_HIDDEN_LAYERS-1.
+    // Each layer consumes the previous layer's registered spikes, creating a timestep pipeline.
     logic [NEURON_ADDR_WIDTH-1:0] hidden_aer_addr [1:NUM_HIDDEN_LAYERS-1];
     logic                         hidden_aer_valid [1:NUM_HIDDEN_LAYERS-1];
     logic signed [CURRENT_WIDTH-1:0] hidden_current [1:NUM_HIDDEN_LAYERS-1][0:NEURONS_PER_LAYER-1];
@@ -174,18 +180,26 @@ module snn_top #(
         .NUM_NEURONS(NEURONS_PER_LAYER),
         .WIDTH(NEURON_WIDTH),
         .FRAC_WIDTH(NEURON_FRAC_WIDTH),
-        .ADDR_WIDTH(NEURON_ADDR_WIDTH)
+        .ADDR_WIDTH(NEURON_ADDR_WIDTH),
+        .THRESHOLD(MATCH_THRESHOLD)
     ) u_output_decoder (
         .clk        (clk),
-        .reset      (rst_n),
+        .rst_n      (rst_n),
         .spike_in   (layer_spikes[NUM_HIDDEN_LAYERS-1]),
         .weight_en  (weight_en),
         .weight_addr(weight_addr),
         .weight_data(weight_data),
         .start      (output_start),
         .done       (output_done),
-        .prediction (prediction)
+        .prediction (prediction),
+        .match      (match)
     );
+
+    generate
+        for (genvar L = 0; L < NUM_HIDDEN_LAYERS; L++) begin : gen_spike_raster
+            assign spike_raster[(L+1)*NEURONS_PER_LAYER-1 -: NEURONS_PER_LAYER] = layer_spikes[L];
+        end
+    endgenerate
 
     // FSM
     logic all_aer_done;
@@ -203,10 +217,13 @@ module snn_top #(
         case (state)
             S_IDLE:
                 // Wait for inference_start signal
-                if (inference_start) state_next = S_SAMPLE;
+                if (inference_start) begin
+                    timestep_next = '0;
+                    state_next    = S_SAMPLE;
+                end
 
             S_SAMPLE: begin
-                // Clear accumulators and start AER sampling for this time step
+                // Clear accumulators, reset AER state, and kick off the decoder pass for this timestep
                 timestep_rst = 1'b1;
                 synapse_rst  = 1'b1;
                 output_start = 1'b1;
@@ -228,7 +245,7 @@ module snn_top #(
             end
 
             S_OUTPUT: begin
-                // Start output decoding for final prediction
+                // Start final output decoding after the pipeline run completes
                 output_start = 1'b1;
                 if (output_done) state_next = S_DONE;
             end

@@ -20,10 +20,12 @@
 //////////////////////////////////////////////////////////////////////////////////
 
 /*
-Takes last layer of 1-bit spikes and turns it into a single Q8.8 16-bit int value
-1. LPF Bank to convert each neuron into a continous activity level
-2. FSM Regression Engine to cycle through each neuron's level, multiply by weight,
-and accumulate value into classification
+Takes last layer spikes and turns them into a single fixed-point classification value.
+1. LPF bank converts each neuron spike train into a continuous activity level.
+2. On start, the decoder snapshots the LPF bank so the regression pass uses one
+    coherent view of neuron activity.
+3. FSM regression engine cycles through the frozen activity levels, multiplies by
+    weight, and accumulates the classification output.
 */
 
 module output_decoder#(
@@ -51,8 +53,9 @@ module output_decoder#(
     
     localparam int GUARD_BITS = $clog2(NUM_NEURONS);
     localparam int ACCUM_WIDTH = (2 * WIDTH) + GUARD_BITS;
-    //filter bank
+    // Filter bank and frozen decode snapshot.
     logic signed [WIDTH-1:0] lpf_outputs [NUM_NEURONS];
+    logic signed [WIDTH-1:0] lpf_snapshot [NUM_NEURONS];
 
     genvar i;
     generate
@@ -84,20 +87,25 @@ module output_decoder#(
             match <= '0;
             accum <= '0;
             ptr <= '0;
+            for (int idx = 0; idx < NUM_NEURONS; idx++) begin
+                lpf_snapshot[idx] <= '0;
+            end
         end else begin
             case (state)
                 IDLE: begin
                     done <= '0;
-                    //match <= '0;
                     if (start) begin
                         ptr <= '0;
                         accum <= '0;
+                        for (int idx = 0; idx < NUM_NEURONS; idx++) begin
+                            lpf_snapshot[idx] <= lpf_outputs[idx];
+                        end
                         state <= COMPUTE;
                     end
                 end
                 
                 COMPUTE: begin
-                    accum <= accum + ($signed({1'b0, lpf_outputs[ptr]}) * weights[ptr]);
+                    accum <= accum + ($signed({1'b0, lpf_snapshot[ptr]}) * weights[ptr]);
                     if (ptr == (ADDR_WIDTH'(NUM_NEURONS - 1)))
                         state <= FINISH;
                     else
