@@ -24,6 +24,7 @@ module snn_top #(
     input  logic                                inference_start,
     output logic                                inference_done,
     output logic                                match,
+    output logic [DM_CHANNELS-1:0]              dm_spike_raster,
     output logic [NUM_HIDDEN_LAYERS*NEURONS_PER_LAYER-1:0] spike_raster,
     output logic signed [31:0]                  prediction,
     input  logic                                weight_en,
@@ -60,6 +61,8 @@ module snn_top #(
         .dm_spike_out(dm_spikes),
         .signal    (dm_reconstructed)
     );
+
+    assign dm_spike_raster = dm_spikes;
 
     // Inter-layer wiring
     logic [NEURONS_PER_LAYER-1:0] layer_spikes [0:NUM_HIDDEN_LAYERS-1];

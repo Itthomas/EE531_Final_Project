@@ -3,6 +3,7 @@
 module tb_snn_top;
 
     localparam int ECG_WIDTH          = 11;
+    parameter int DM_STEP_SIZE        = 2;
     localparam int NUM_HIDDEN_LAYERS  = 4;
     localparam int NEURONS_PER_LAYER  = 8;
     localparam int NEURON_WIDTH       = 16;
@@ -11,6 +12,7 @@ module tb_snn_top;
     localparam int CLK_PERIOD         = 10;
     localparam string ECG_FILE        = "z:/Coursework/EE531/Final/ecg_input_100.txt";
     localparam string WEIGHT_FILE     = "z:/Coursework/EE531/Final/output_weights.txt";
+    localparam string RASTER_FILE     = "z:/Coursework/EE531/Final/spike_raster_log.txt";
 
     logic clk;
     logic rst_n;
@@ -18,6 +20,7 @@ module tb_snn_top;
     logic inference_start;
     logic inference_done;
     logic match;
+    logic [1:0] dm_spike_raster;
     logic [NUM_HIDDEN_LAYERS*NEURONS_PER_LAYER-1:0] spike_raster;
     logic signed [31:0] prediction;
     logic weight_en;
@@ -26,13 +29,15 @@ module tb_snn_top;
 
     logic [ECG_WIDTH-1:0] ecg_samples [0:NUM_SAMPLES-1];
     logic signed [NEURON_WIDTH-1:0] output_weights [0:NEURONS_PER_LAYER-1];
+    int raster_fd;
 
     snn_top #(
         .ECG_WIDTH(ECG_WIDTH),
         .NUM_HIDDEN_LAYERS(NUM_HIDDEN_LAYERS),
         .NEURONS_PER_LAYER(NEURONS_PER_LAYER),
         .NEURON_WIDTH(NEURON_WIDTH),
-        .NUM_TIMESTEPS(NUM_TIMESTEPS)
+        .NUM_TIMESTEPS(NUM_TIMESTEPS),
+        .DM_STEP_SIZE(DM_STEP_SIZE)
     ) dut (
         .clk            (clk),
         .rst_n          (rst_n),
@@ -40,6 +45,7 @@ module tb_snn_top;
         .inference_start(inference_start),
         .inference_done (inference_done),
         .match          (match),
+        .dm_spike_raster(dm_spike_raster),
         .spike_raster   (spike_raster),
         .prediction     (prediction),
         .weight_en      (weight_en),
@@ -110,13 +116,30 @@ module tb_snn_top;
         weight_data <= '0;
     endtask
 
-    task automatic print_spike_raster(input int sample_idx);
+    task automatic print_spike_raster(
+        input int sample_idx,
+        input logic [1:0] dm_spike_window
+    );
         $display(
             "sample=%0d state=%s timestep=%0d dm=%b L0=%b L1=%b L2=%b L3=%b pred=%0d match=%0b",
             sample_idx,
             state_name(dut.state),
             dut.timestep,
-            dut.dm_spikes,
+            dm_spike_window,
+            dut.layer_spikes[0],
+            dut.layer_spikes[1],
+            dut.layer_spikes[2],
+            dut.layer_spikes[3],
+            prediction,
+            match
+        );
+        $fwrite(
+            raster_fd,
+            "sample=%0d state=%s timestep=%0d dm=%b L0=%b L1=%b L2=%b L3=%b pred=%0d match=%0b\n",
+            sample_idx,
+            state_name(dut.state),
+            dut.timestep,
+            dm_spike_window,
             dut.layer_spikes[0],
             dut.layer_spikes[1],
             dut.layer_spikes[2],
@@ -127,7 +150,10 @@ module tb_snn_top;
     endtask
 
     task automatic run_one_inference(input int sample_idx);
+        logic [1:0] dm_spike_window;
+
         ecg_in = ecg_samples[sample_idx];
+        dm_spike_window = '0;
 
         @(posedge clk);
         inference_start <= 1'b1;
@@ -136,8 +162,12 @@ module tb_snn_top;
 
         while (!inference_done) begin
             @(posedge clk);
-            if ((dut.state == 3'd3) || (dut.state == 3'd5))
-                print_spike_raster(sample_idx);
+            #1;
+            dm_spike_window |= dm_spike_raster;
+            if ((dut.state == 3'd3) || (dut.state == 3'd5)) begin
+                print_spike_raster(sample_idx, dm_spike_window);
+                dm_spike_window = '0;
+            end
         end
 
         $display(
@@ -161,11 +191,17 @@ module tb_snn_top;
 
         load_ecg_samples();
         read_output_weights();
+        raster_fd = $fopen(RASTER_FILE, "w");
+        if (raster_fd == 0)
+            $fatal(1, "Failed to open raster log file: %s", RASTER_FILE);
+        $fwrite(raster_fd, "# spike raster log\n");
+        $fwrite(raster_fd, "# sample state timestep dm L0 L1 L2 L3 prediction match\n");
 
         repeat (4) @(posedge clk);
         rst_n = 1'b1;
         $display("Loaded %0d ECG samples from %s", NUM_SAMPLES, ECG_FILE);
         $display("Loaded %0d output weights from %s", NEURONS_PER_LAYER, WEIGHT_FILE);
+        $display("Saving spike raster log to %s", RASTER_FILE);
 
         program_output_weights();
         $display("Output decoder weights programmed");
@@ -175,6 +211,7 @@ module tb_snn_top;
         end
 
         $display("Completed %0d top-level SNN smoke-test inferences", NUM_SAMPLES);
+        $fclose(raster_fd);
         #20;
         $finish;
     end
