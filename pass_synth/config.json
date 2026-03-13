@@ -1,0 +1,25 @@
+{
+    "DESIGN_NAME": "snn_top",
+    "VERILOG_FILES": [
+        "dir::snn_top.sv",
+        "dir::delta_mod.sv",
+        "dir::aer_handler.sv",
+        "dir::synapse_accumulator.sv",
+        "dir::lif_neuron_fixed.sv",
+        "dir::output_decoder.sv",
+        "dir::lpf_unit.sv"
+    ],
+    "CLOCK_PERIOD": 25.0,
+    "CLOCK_PORT": "clk",
+    "CLOCK_NET": "clk",
+    "pdk::sky130A": {
+        "MAX_FANOUT_CONSTRAINT": 15,
+        "FP_CORE_UTIL": 40,
+        "PL_TARGET_DENSITY_pct": 45,
+        "SYNTH_STRATEGY": "AREA 0",
+        "PL_RESIZER_BUFFER_INPUT_PORTS": true,
+        "PL_RESIZER_DESIGN_OPTIMIZATIONS": true,
+        "PL_RESIZER_REPAIR_TIE_FANOUT": true,
+        "DPL_CELL_PADDING": 2
+    }
+}
