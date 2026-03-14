@@ -40,6 +40,17 @@ def parse_log(file_path: Path):
     return records
 
 
+def load_ecg_signal(file_path: Path):
+    """Load ECG signal values from a text file (one value per line)."""
+    signal = []
+    with file_path.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                signal.append(float(line))
+    return signal
+
+
 def spikes_from_bits(bitstring: str):
     # Treat left-most bit as neuron 0 for simple visual indexing.
     return [idx for idx, bit in enumerate(bitstring) if bit == "1"]
@@ -80,13 +91,19 @@ def build_raster_points(records):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Plot L0-L3 spike raster and match line from spike log"
+        description="Plot ECG signal, spike raster, and match line from spike log"
     )
     parser.add_argument(
         "--input",
         type=Path,
         default=Path(__file__).with_name("spike_raster_log.txt"),
         help="Path to spike_raster_log.txt",
+    )
+    parser.add_argument(
+        "--ecg",
+        type=Path,
+        default=Path(__file__).with_name("ecg_input_100.txt"),
+        help="Path to ECG input signal file",
     )
     parser.add_argument(
         "--state",
@@ -103,18 +120,28 @@ def main():
     if not records:
         raise ValueError("No valid records found in log after parsing/filtering")
 
+    ecg_signal = load_ecg_signal(args.ecg)
+
     raster_x, raster_y, tick_positions, tick_labels, layer_boundaries = build_raster_points(records)
     match_values = [r["match"] for r in records]
     xs = list(range(len(records)))
+    ecg_xs = list(range(len(ecg_signal)))
 
-    fig, (ax_raster, ax_match) = plt.subplots(
-        2,
+    fig, (ax_ecg, ax_raster, ax_match) = plt.subplots(
+        3,
         1,
-        figsize=(12, 7),
-        sharex=True,
-        gridspec_kw={"height_ratios": [3, 1]},
+        figsize=(12, 10),
+        sharex=False,
+        gridspec_kw={"height_ratios": [1, 3, 1]},
     )
 
+    # Plot ECG signal
+    ax_ecg.plot(ecg_xs, ecg_signal, linewidth=1.0, color="tab:blue")
+    ax_ecg.set_title("ECG Input Signal")
+    ax_ecg.set_ylabel("Amplitude")
+    ax_ecg.grid(True, alpha=0.25)
+
+    # Plot spike raster
     ax_raster.scatter(raster_x, raster_y, s=12, marker="|", color="black")
     
     # Draw horizontal lines to separate layers
@@ -127,9 +154,10 @@ def main():
     ax_raster.set_yticklabels(tick_labels)
     ax_raster.grid(True, alpha=0.25)
 
+    # Plot match line
     ax_match.plot(xs, match_values, color="tab:red", linewidth=1.5)
     ax_match.set_title("Binary Classification Output (1=match, 0=mismatch)")
-    ax_match.set_xlabel("Record Index")
+    ax_match.set_xlabel("Record Index (Raster) / Sample Index (ECG)")
     ax_match.set_ylabel("Match")
     ax_match.grid(True, alpha=0.25)
 
